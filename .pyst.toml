@@ -1,0 +1,3 @@
+[contexts]
+  [contexts.default]
+  enabled = ["*", "!db-*", "!deploy-prod"]

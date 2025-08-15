@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo check:*)",
+      "Bash(cargo:*)",
+      "Bash(mkdir:*)",
+      "Bash(./target/debug/pyst install:*)",
+      "Bash(./target/debug/pyst list:*)",
+      "Bash(./target/debug/pyst run:*)",
+      "Bash(./target/debug/pyst:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:dspy.ai)"
+    ],
+    "defaultMode": "acceptEdits"
+  }
+}

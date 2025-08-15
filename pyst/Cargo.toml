@@ -1,0 +1,27 @@
+[package]
+name = "pyst"
+version = "0.1.0"
+edition = "2021"
+authors = ["Riley Leff <riley@anthropic.com>"]
+description = "A modern, ergonomic command runner for the Python ecosystem"
+license = "MIT"
+
+[[bin]]
+name = "pyst"
+path = "src/main.rs"
+
+[dependencies]
+pyst-lib = { path = "../pyst-lib" }
+clap = { workspace = true }
+clap_complete = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+dirs = { workspace = true }
+
+[dev-dependencies]
+assert_cmd = { workspace = true }
+insta = { workspace = true }
+tempfile = { workspace = true }
+predicates = "3.0"

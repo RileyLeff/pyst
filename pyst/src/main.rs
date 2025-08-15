@@ -691,7 +691,21 @@ async fn handle_cache(context: &Context, action: CacheAction) -> Result<ExitCode
     Ok(ExitCode::Success)
 }
 
-async fn handle_mcp(context: &Context, _port: u16, _transport: McpTransport) -> Result<ExitCode> {
-    println!("MCP command - not yet implemented");
+async fn handle_mcp(context: &Context, port: u16, transport: McpTransport) -> Result<ExitCode> {
+    use pyst_lib::McpServer;
+    
+    let server = McpServer::new(context.config.clone());
+    
+    match transport {
+        McpTransport::Stdio => {
+            eprintln!("Starting MCP server in stdio mode...");
+            server.start_stdio().await?;
+        }
+        McpTransport::Tcp => {
+            eprintln!("TCP transport not yet implemented, falling back to stdio");
+            server.start_stdio().await?;
+        }
+    }
+    
     Ok(ExitCode::Success)
 }

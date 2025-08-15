@@ -40,6 +40,12 @@ pyst document script.py      # AI-powered documentation generation
 - Interactive approval workflow with diff preview
 - Guardrails with `.pystdocignore` and inline markers
 
+### 🔌 **MCP Integration for AI Agents**
+- Model Context Protocol (MCP) server for AI agent integration
+- Allows Claude and other AI systems to discover and execute scripts
+- JSON-RPC 2.0 over stdio transport with full MCP compliance
+- Four powerful tools: list_scripts, run_script, get_script_info, explain_script
+
 ### 🛡️ **Security & Trust**
 - Safe AST-based introspection by default
 - Opt-in import-mode for trusted scripts

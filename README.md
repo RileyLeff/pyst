@@ -1,6 +1,6 @@
 # pyst 🐍⚡
 
-A modern, ergonomic command runner for the Python ecosystem. Transform your scattered Python scripts into a coherent, discoverable, and shareable toolset.
+An ergonomic command runner for humans and LLMs. It's like [Just](https://github.com/casey/just), but for python, with [uv](https://github.com/astral-sh/uv) handling the dependency management for you behind the scenes.
 
 ```bash
 # Discover and run scripts effortlessly
@@ -347,5 +347,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Rust](https://rust-lang.org) - Systems programming language for performance and safety
 
 ---
-
-**pyst**: From scattered scripts to sophisticated toolchains. 🐍⚡

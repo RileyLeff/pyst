@@ -9,7 +9,8 @@
       "Bash(./target/debug/pyst run:*)",
       "Bash(./target/debug/pyst:*)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:dspy.ai)"
+      "WebFetch(domain:dspy.ai)",
+      "Bash(source .env)"
     ],
     "defaultMode": "acceptEdits"
   }

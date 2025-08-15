@@ -651,9 +651,21 @@ async fn handle_trust(context: &Context, target: &str) -> Result<ExitCode> {
     Ok(ExitCode::Success)
 }
 
-async fn handle_document(context: &Context, _script: &str, _write: bool, _check: bool) -> Result<ExitCode> {
-    println!("Document command - not yet implemented");
-    Ok(ExitCode::Success)
+async fn handle_document(context: &Context, script: &str, write: bool, check: bool) -> Result<ExitCode> {
+    use pyst_lib::Documenter;
+    
+    let documenter = Documenter::new(context.config.clone());
+    
+    match documenter.document(script, write, check).await {
+        Ok(message) => {
+            println!("{}", message);
+            Ok(ExitCode::Success)
+        }
+        Err(err) => {
+            eprintln!("Documentation failed: {}", err);
+            Ok(ExitCode::GenericError)
+        }
+    }
 }
 
 async fn handle_completions(_shell: clap_complete::Shell) -> Result<ExitCode> {

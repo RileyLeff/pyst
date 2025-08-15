@@ -44,14 +44,20 @@ impl Default for UvConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DocumentConfig {
-    #[serde(default = "default_provider")]
-    pub provider: String,
-    
     #[serde(default = "default_model")]
     pub model: String,
     
     #[serde(default = "default_api_key_env")]
     pub api_key_env: String,
+    
+    #[serde(default)]
+    pub api_base: Option<String>,
+    
+    #[serde(default)]
+    pub max_tokens: Option<u32>,
+    
+    #[serde(default)]
+    pub temperature: Option<f32>,
     
     #[serde(default)]
     pub redact: Vec<String>,
@@ -96,9 +102,11 @@ impl Default for CoreConfig {
 impl Default for DocumentConfig {
     fn default() -> Self {
         Self {
-            provider: default_provider(),
             model: default_model(),
             api_key_env: default_api_key_env(),
+            api_base: default_api_base(),
+            max_tokens: None,
+            temperature: None,
             redact: vec!["SECRET_*".to_string(), "API_KEY_*".to_string()],
         }
     }
@@ -208,14 +216,20 @@ impl Config {
         }
         
         // Merge document config
-        if other.document.provider != default_provider() {
-            self.document.provider = other.document.provider;
-        }
         if other.document.model != default_model() {
             self.document.model = other.document.model;
         }
         if other.document.api_key_env != default_api_key_env() {
             self.document.api_key_env = other.document.api_key_env;
+        }
+        if other.document.api_base.is_some() {
+            self.document.api_base = other.document.api_base;
+        }
+        if other.document.max_tokens.is_some() {
+            self.document.max_tokens = other.document.max_tokens;
+        }
+        if other.document.temperature.is_some() {
+            self.document.temperature = other.document.temperature;
         }
         if !other.document.redact.is_empty() {
             self.document.redact = other.document.redact;
@@ -331,14 +345,14 @@ fn default_introspection() -> String {
     "safe".to_string()
 }
 
-fn default_provider() -> String {
-    "gemini".to_string()
-}
-
 fn default_model() -> String {
-    "gemini-1.5-flash".to_string()
+    "google/gemini-2.5-flash".to_string()
 }
 
 fn default_api_key_env() -> String {
-    "GOOGLE_API_KEY".to_string()
+    "OPENROUTER_API_KEY".to_string()
+}
+
+fn default_api_base() -> Option<String> {
+    Some("https://openrouter.ai/api/v1".to_string())
 }

@@ -1,3 +1,4 @@
+"""Greets the user by name, defaulting to "World"."""
 # /// script
 # dependencies = ["typer"]
 # ///

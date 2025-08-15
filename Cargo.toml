@@ -28,3 +28,6 @@ features = ["json"]
 
 [workspace.dependencies.tempfile]
 version = "3.8"
+
+# Python dependencies for the helper scripts
+# These will be managed by uv when running the Python helpers

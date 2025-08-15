@@ -1,0 +1,8 @@
+# Ignore test files
+test_*.py
+
+# Ignore specific files
+db-backup.py
+
+# Ignore temporary files
+*.tmp.py

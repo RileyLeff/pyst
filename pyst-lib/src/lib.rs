@@ -10,6 +10,7 @@ pub use config::Config;
 pub use discovery::{Discovery, ProjectRoot, ScriptInfo, EntryPoint};
 pub use executor::{Executor, ExitCode};
 pub use install::{Installer, InstallSource, InstalledScript};
+pub use document::Documenter;
 
 use anyhow::Result;
 use std::path::PathBuf;

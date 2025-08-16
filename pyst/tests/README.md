@@ -25,6 +25,12 @@ We use two complementary testing strategies:
 - **Reliability**: Container tests ensure pyst's core logic works consistently
 - **Speed**: Optimized Docker images + reduced redundancy = faster CI
 
+### Platform-Specific Notes
+- **Linux ARM64**: Uses vendored OpenSSL (`OPENSSL_VENDORED=1`) for cross-compilation to avoid linking issues
+- **Windows**: Native tests catch Windows-specific path handling and file system behavior
+- **macOS**: Tests both Intel and Apple Silicon architectures natively
+- **Code Coverage**: Focuses on library code only, excludes integration tests for simplicity
+
 ## Test Organization
 
 ### Unit Tests

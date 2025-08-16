@@ -479,7 +479,10 @@ impl McpServer {
             .unwrap_or(false);
         
         // For MCP, we'll use a simplified execution that captures output
-        let mut cmd = Command::new("./target/debug/pyst");
+        // Use current executable instead of hardcoded debug path
+        let pyst_exe = std::env::current_exe()
+            .unwrap_or_else(|_| std::path::PathBuf::from("pyst"));
+        let mut cmd = Command::new(pyst_exe);
         cmd.args(&["run", script]);
         
         if force {

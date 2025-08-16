@@ -312,10 +312,18 @@ impl Config {
         }
     }
     
-    fn expand_path(&self, path_str: &str) -> Result<PathBuf> {
+    pub fn expand_path(&self, path_str: &str) -> Result<PathBuf> {
         if path_str.starts_with('~') {
             if let Some(home) = dirs::home_dir() {
-                Ok(home.join(&path_str[2..]))
+                // Fix tilde expansion bug - handle both "~" and "~/path"
+                if path_str == "~" {
+                    Ok(home)
+                } else if path_str.starts_with("~/") {
+                    Ok(home.join(&path_str[2..]))
+                } else {
+                    // Handle cases like "~username" - for now just treat as literal
+                    Ok(PathBuf::from(path_str))
+                }
             } else {
                 Err(anyhow!("Cannot expand ~: home directory not found"))
             }

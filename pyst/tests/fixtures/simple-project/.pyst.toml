@@ -1,0 +1,7 @@
+[core]
+project_script_dir = ".pyst"
+cwd = "project"
+
+[contexts]
+  [contexts.default]
+  enabled = ["*"]

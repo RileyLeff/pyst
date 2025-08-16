@@ -25,3 +25,4 @@ assert_cmd = { workspace = true }
 insta = { workspace = true }
 tempfile = { workspace = true }
 predicates = "3.0"
+testcontainers = "0.22"

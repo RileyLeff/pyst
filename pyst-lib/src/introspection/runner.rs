@@ -12,6 +12,7 @@ pub struct IntrospectionRunner {
     config: Config,
     cache: Cache,
     trusted_paths: HashSet<PathBuf>,
+    no_cache: bool,
 }
 
 impl IntrospectionRunner {
@@ -23,13 +24,28 @@ impl IntrospectionRunner {
             config,
             cache,
             trusted_paths,
+            no_cache: false,
+        })
+    }
+    
+    pub fn new_with_no_cache(config: Config, no_cache: bool) -> Result<Self> {
+        let cache = Cache::new(&config)?;
+        let trusted_paths = Self::load_trusted_paths(&config)?;
+        
+        Ok(Self {
+            config,
+            cache,
+            trusted_paths,
+            no_cache,
         })
     }
     
     pub fn introspect(&mut self, script_path: &Path) -> Result<IntrospectionResult> {
-        // Check cache first
-        if let Some(cached_result) = self.cache.get(script_path) {
-            return Ok(cached_result.clone());
+        // Check cache first (unless no-cache is enabled)
+        if !self.no_cache {
+            if let Some(cached_result) = self.cache.get(script_path) {
+                return Ok(cached_result.clone());
+            }
         }
         
         // Determine introspection mode
@@ -38,9 +54,11 @@ impl IntrospectionRunner {
         // Run introspection
         let result = self.run_introspection(script_path, mode)?;
         
-        // Cache the result
-        if let Err(e) = self.cache.put(script_path, result.clone()) {
-            eprintln!("Warning: Failed to cache introspection result: {}", e);
+        // Cache the result (unless no-cache is enabled)
+        if !self.no_cache {
+            if let Err(e) = self.cache.put(script_path, result.clone()) {
+                eprintln!("Warning: Failed to cache introspection result: {}", e);
+            }
         }
         
         Ok(result)
@@ -129,6 +147,11 @@ impl IntrospectionRunner {
            .arg(script_path)
            .arg("--mode")
            .arg(mode.to_string());
+        
+        // Apply offline mode if configured
+        if self.config.core.offline {
+            cmd.env("UV_NO_NETWORK", "1");
+        }
         
         let output = cmd.output()?;
         

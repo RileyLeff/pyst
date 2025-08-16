@@ -11,7 +11,14 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:dspy.ai)",
       "Bash(source .env)",
-      "WebFetch(domain:modelcontextprotocol.io)"
+      "WebFetch(domain:modelcontextprotocol.io)",
+      "Bash(uv run:*)",
+      "Bash(PYST_UV_FLAGS=\"--verbose --no-cache\" ./target/debug/pyst run:*)",
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(rm:*)",
+      "WebSearch",
+      "WebFetch(domain:rust.testcontainers.org)",
+      "WebFetch(domain:docs.rs)"
     ],
     "defaultMode": "acceptEdits"
   }

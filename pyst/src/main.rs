@@ -1,7 +1,7 @@
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
-use pyst_lib::{Context, Discovery, Executor, ExitCode};
+use pyst_lib::{Context, CliOverrides, Discovery, Executor, ExitCode};
 use std::path::PathBuf;
 use std::process;
 
@@ -223,7 +223,20 @@ async fn main() {
 
 async fn run() -> Result<ExitCode> {
     let cli = Cli::parse();
-    let context = Context::new()?;
+    
+    // Create CLI overrides from parsed arguments
+    let cli_overrides = CliOverrides {
+        context: cli.context.clone(),
+        config_path: cli.config.clone(),
+        no_cache: cli.no_cache,
+        offline: if cli.offline { Some(true) } else { None },
+        cwd: cli.cwd.clone(),
+        uv_flags: cli.uv_flags.as_ref().map(|flags| {
+            flags.split_whitespace().map(|s| s.to_string()).collect()
+        }),
+    };
+    
+    let context = Context::new_with_overrides(cli.config.clone(), cli_overrides.clone())?;
     
     // If no subcommand is provided, default to list
     let command = cli.command.unwrap_or(Commands::List {
@@ -233,13 +246,13 @@ async fn run() -> Result<ExitCode> {
     
     match command {
         Commands::List { all, format } => {
-            handle_list(&context, all, format).await
+            handle_list(&context, &cli_overrides, all, format).await
         }
         Commands::Run { script, force, dry_run, args } => {
-            handle_run(&context, &script, force, dry_run, args).await
+            handle_run(&context, &cli_overrides, &script, force, dry_run, args).await
         }
         Commands::Info { script } => {
-            handle_info(&context, &script).await
+            handle_info(&context, &cli_overrides, &script).await
         }
         Commands::Which { script } => {
             handle_which(&context, &script).await
@@ -257,7 +270,7 @@ async fn run() -> Result<ExitCode> {
             handle_update(&context, &script).await
         }
         Commands::Trust { target } => {
-            handle_trust(&context, &target).await
+            handle_trust(&context, &cli_overrides, &target).await
         }
         Commands::Document { script, write, check } => {
             handle_document(&context, &script, write, check).await
@@ -266,7 +279,7 @@ async fn run() -> Result<ExitCode> {
             handle_completions(shell).await
         }
         Commands::Cache { action } => {
-            handle_cache(&context, action).await
+            handle_cache(&context, &cli_overrides, action).await
         }
         Commands::Mcp { port, transport } => {
             handle_mcp(&context, port, transport).await
@@ -274,7 +287,7 @@ async fn run() -> Result<ExitCode> {
     }
 }
 
-async fn handle_list(context: &Context, all: bool, format: ListFormat) -> Result<ExitCode> {
+async fn handle_list(context: &Context, cli_overrides: &CliOverrides, all: bool, format: ListFormat) -> Result<ExitCode> {
     use pyst_lib::introspection::runner::IntrospectionRunner;
     use pyst_lib::Installer;
     
@@ -303,7 +316,7 @@ async fn handle_list(context: &Context, all: bool, format: ListFormat) -> Result
     }
     
     // Get introspection data for enhanced output
-    let mut runner = IntrospectionRunner::new(context.config.clone())?;
+    let mut runner = IntrospectionRunner::new_with_no_cache(context.config.clone(), cli_overrides.no_cache)?;
     let script_paths: Vec<_> = scripts.iter().map(|s| s.path.clone()).collect();
     let introspection_results = runner.introspect_batch(&script_paths)?;
     
@@ -381,7 +394,7 @@ async fn handle_list(context: &Context, all: bool, format: ListFormat) -> Result
     Ok(ExitCode::Success)
 }
 
-async fn handle_run(context: &Context, script: &str, force: bool, dry_run: bool, args: Vec<String>) -> Result<ExitCode> {
+async fn handle_run(context: &Context, cli_overrides: &CliOverrides, script: &str, force: bool, dry_run: bool, args: Vec<String>) -> Result<ExitCode> {
     let discovery = Discovery::new(context.config.clone());
     let script_info = match discovery.resolve_script(script, context.project_root.as_deref()) {
         Ok(info) => info,
@@ -400,11 +413,16 @@ async fn handle_run(context: &Context, script: &str, force: bool, dry_run: bool,
         }
     }
     
-    let executor = Executor::new(context.config.clone());
+    let executor = Executor::with_overrides(
+        context.config.clone(),
+        cli_overrides.offline,
+        cli_overrides.cwd.clone(),
+        cli_overrides.uv_flags.clone()
+    );
     executor.run_script(&script_info.path, &args, force, dry_run).await
 }
 
-async fn handle_info(context: &Context, script: &str) -> Result<ExitCode> {
+async fn handle_info(context: &Context, cli_overrides: &CliOverrides, script: &str) -> Result<ExitCode> {
     use pyst_lib::introspection::runner::IntrospectionRunner;
     
     let discovery = Discovery::new(context.config.clone());
@@ -414,7 +432,7 @@ async fn handle_info(context: &Context, script: &str) -> Result<ExitCode> {
     };
     
     // Get enhanced introspection data
-    let mut runner = IntrospectionRunner::new(context.config.clone())?;
+    let mut runner = IntrospectionRunner::new_with_no_cache(context.config.clone(), cli_overrides.no_cache)?;
     let introspection = runner.introspect(&script_info.path)?;
     
     // Check context status
@@ -627,10 +645,10 @@ async fn handle_update(context: &Context, script: &str) -> Result<ExitCode> {
     }
 }
 
-async fn handle_trust(context: &Context, target: &str) -> Result<ExitCode> {
+async fn handle_trust(context: &Context, cli_overrides: &CliOverrides, target: &str) -> Result<ExitCode> {
     use pyst_lib::introspection::runner::IntrospectionRunner;
     
-    let mut runner = IntrospectionRunner::new(context.config.clone())?;
+    let mut runner = IntrospectionRunner::new_with_no_cache(context.config.clone(), cli_overrides.no_cache)?;
     let target_path = std::path::PathBuf::from(target);
     
     if !target_path.exists() {
@@ -668,15 +686,19 @@ async fn handle_document(context: &Context, script: &str, write: bool, check: bo
     }
 }
 
-async fn handle_completions(_shell: clap_complete::Shell) -> Result<ExitCode> {
-    println!("Completions command - not yet implemented");
+async fn handle_completions(shell: clap_complete::Shell) -> Result<ExitCode> {
+    use clap_complete::generate;
+    use std::io;
+    
+    let mut cmd = Cli::command();
+    generate(shell, &mut cmd, "pyst", &mut io::stdout());
     Ok(ExitCode::Success)
 }
 
-async fn handle_cache(context: &Context, action: CacheAction) -> Result<ExitCode> {
+async fn handle_cache(context: &Context, cli_overrides: &CliOverrides, action: CacheAction) -> Result<ExitCode> {
     use pyst_lib::introspection::runner::IntrospectionRunner;
     
-    let mut runner = IntrospectionRunner::new(context.config.clone())?;
+    let mut runner = IntrospectionRunner::new_with_no_cache(context.config.clone(), cli_overrides.no_cache)?;
     
     match action {
         CacheAction::Clear => {

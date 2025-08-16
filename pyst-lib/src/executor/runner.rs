@@ -1,8 +1,8 @@
 use crate::{Config, ExitCode};
 use anyhow::Result;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use std::env;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 pub struct Executor {
     config: Config,
@@ -14,19 +14,19 @@ pub struct Executor {
 
 impl Executor {
     pub fn new(config: Config) -> Self {
-        Self { 
+        Self {
             config,
             offline_override: None,
             cwd_override: None,
             uv_flags_override: None,
         }
     }
-    
+
     pub fn with_overrides(
-        config: Config, 
+        config: Config,
         offline: Option<bool>,
         cwd: Option<PathBuf>,
-        uv_flags: Option<Vec<String>>
+        uv_flags: Option<Vec<String>>,
     ) -> Self {
         Self {
             config,
@@ -45,59 +45,64 @@ impl Executor {
     ) -> Result<ExitCode> {
         let mut cmd = Command::new("uv");
         cmd.arg("run");
-        
+
         // Add uv flags with precedence: CLI override > env > config
         let uv_flags = self.resolve_uv_flags();
         for flag in &uv_flags {
             cmd.arg(flag);
         }
-        
+
         // Add script path
         cmd.arg(script_path);
-        
+
         // Add separator between uv args and script args only if necessary
         // We need -- when script args might be confused with uv options
-        if !uv_flags.is_empty() && !args.is_empty() && Self::needs_separator(&args) {
+        if !uv_flags.is_empty() && !args.is_empty() && Self::needs_separator(args) {
             cmd.arg("--");
         }
-        
-        // Add script arguments  
+
+        // Add script arguments
         for arg in args {
             cmd.arg(arg);
         }
-        
+
         // Set working directory
         if let Some(cwd) = self.resolve_working_directory(script_path)? {
             cmd.current_dir(&cwd);
         }
-        
+
         // Apply offline mode
         if self.is_offline_mode() {
             cmd.env("UV_NO_NETWORK", "1");
         }
-        
+
         if dry_run {
             let cwd_info = if let Some(cwd) = self.resolve_working_directory(script_path)? {
                 format!(" (cwd: {})", cwd.display())
             } else {
                 String::new()
             };
-            
+
             let uv_flags_info = if uv_flags.is_empty() {
                 String::new()
             } else {
                 format!(" [uv flags: {}]", uv_flags.join(" "))
             };
-            
+
             let offline_info = if self.is_offline_mode() {
                 " [UV_NO_NETWORK=1]"
             } else {
                 ""
             };
-            
-            println!("Would execute: uv run{} {} -- {}{}{}{}", 
-                if uv_flags.is_empty() { "" } else { &format!(" {}", uv_flags.join(" ")) },
-                script_path.display(), 
+
+            println!(
+                "Would execute: uv run{} {} -- {}{}{}{}",
+                if uv_flags.is_empty() {
+                    ""
+                } else {
+                    &format!(" {}", uv_flags.join(" "))
+                },
+                script_path.display(),
                 args.join(" "),
                 cwd_info,
                 uv_flags_info,
@@ -105,14 +110,14 @@ impl Executor {
             );
             return Ok(ExitCode::Success);
         }
-        
+
         // Stream stdio to allow real-time output
         let status = cmd
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .status()?;
-        
+
         if status.success() {
             Ok(ExitCode::Success)
         } else {
@@ -124,33 +129,38 @@ impl Executor {
             }
         }
     }
-    
+
     fn resolve_uv_flags(&self) -> Vec<String> {
         // CLI override takes highest precedence
         if let Some(ref override_flags) = self.uv_flags_override {
             return override_flags.clone();
         }
-        
+
         // Check environment variable
         if let Ok(env_flags) = env::var("PYST_UV_FLAGS") {
-            return env_flags.split_whitespace().map(|s| s.to_string()).collect();
+            return env_flags
+                .split_whitespace()
+                .map(|s| s.to_string())
+                .collect();
         }
-        
+
         // Fall back to config
         self.config.core.uv.flags.clone()
     }
-    
-    fn resolve_working_directory(&self, script_path: &PathBuf) -> Result<Option<PathBuf>> {
+
+    fn resolve_working_directory(&self, script_path: &Path) -> Result<Option<PathBuf>> {
         // CLI override takes precedence
         if let Some(ref override_cwd) = self.cwd_override {
             return Ok(Some(override_cwd.clone()));
         }
-        
+
         match self.config.core.cwd.as_str() {
             "project" => {
                 // Find project root
                 if let Ok(current_dir) = env::current_dir() {
-                    if let Some(project_root) = crate::discovery::Discovery::find_project_root(&current_dir) {
+                    if let Some(project_root) =
+                        crate::discovery::Discovery::find_project_root(&current_dir)
+                    {
                         Ok(Some(project_root.path))
                     } else {
                         // No project root found, use current directory
@@ -159,15 +169,15 @@ impl Executor {
                 } else {
                     Ok(None)
                 }
-            },
+            }
             "script" => {
                 // Use script's parent directory
                 Ok(script_path.parent().map(|p| p.to_path_buf()))
-            },
+            }
             "current" => {
                 // Use current working directory (no change needed)
                 Ok(None)
-            },
+            }
             custom_path => {
                 // Use custom path from config
                 let expanded = self.config.expand_path(custom_path)?;
@@ -175,28 +185,29 @@ impl Executor {
             }
         }
     }
-    
+
     fn is_offline_mode(&self) -> bool {
         // CLI override takes precedence
         if let Some(offline) = self.offline_override {
             return offline;
         }
-        
+
         // Check environment variable
         if let Ok(env_offline) = env::var("PYST_OFFLINE") {
             return env_offline.parse().unwrap_or(false);
         }
-        
+
         // Fall back to config
         self.config.core.offline
     }
-    
+
     /// Determine if we need a -- separator to avoid confusing script args with uv options
     fn needs_separator(args: &[String]) -> bool {
         // Check if any argument exactly matches uv options that could cause conflicts
         // We only need -- if script args would be interpreted as uv options
         args.iter().any(|arg| {
-            matches!(arg.as_str(),
+            matches!(
+                arg.as_str(),
                 // Python interpreter options
                 "--python" | "-p" |
                 // Index/package options  
@@ -211,9 +222,12 @@ impl Executor {
                 "--help" | "-h" |
                 // Only exact short flags that uv uses
                 "-v" | "-q" | "-C" | "-U" | "-P" | "-w" | "-m" | "-s" | "-i"
-            ) || arg.starts_with("--python=") || arg.starts_with("--index=") || 
-                 arg.starts_with("--cache-dir=") || arg.starts_with("--directory=") ||
-                 arg.starts_with("--project=") || arg.starts_with("--config-file=")
+            ) || arg.starts_with("--python=")
+                || arg.starts_with("--index=")
+                || arg.starts_with("--cache-dir=")
+                || arg.starts_with("--directory=")
+                || arg.starts_with("--project=")
+                || arg.starts_with("--config-file=")
         })
     }
 }

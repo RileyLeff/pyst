@@ -1,16 +1,16 @@
 pub mod config;
 pub mod discovery;
-pub mod executor;
-pub mod introspection;
-pub mod install;
 pub mod document;
+pub mod executor;
+pub mod install;
+pub mod introspection;
 pub mod mcp;
 
 pub use config::Config;
-pub use discovery::{Discovery, ProjectRoot, ScriptInfo, EntryPoint};
-pub use executor::{Executor, ExitCode};
-pub use install::{Installer, InstallSource, InstalledScript};
+pub use discovery::{Discovery, EntryPoint, ProjectRoot, ScriptInfo};
 pub use document::Documenter;
+pub use executor::{Executor, ExitCode};
+pub use install::{InstallSource, InstalledScript, Installer};
 pub use mcp::McpServer;
 
 // Context and CliOverrides are defined in this module
@@ -38,17 +38,20 @@ impl Context {
     pub fn new() -> Result<Self> {
         Self::new_with_overrides(None, CliOverrides::default())
     }
-    
-    pub fn new_with_overrides(config_override: Option<PathBuf>, cli_overrides: CliOverrides) -> Result<Self> {
+
+    pub fn new_with_overrides(
+        config_override: Option<PathBuf>,
+        cli_overrides: CliOverrides,
+    ) -> Result<Self> {
         let config = Config::load_with_override(config_override)?;
-        let project_root = Discovery::find_project_root(&std::env::current_dir()?)
-            .map(|pr| pr.path);
-        
+        let project_root =
+            Discovery::find_project_root(&std::env::current_dir()?).map(|pr| pr.path);
+
         // Apply context override by setting environment variable
         if let Some(context) = cli_overrides.context {
             std::env::set_var("PYST_CONTEXT", context);
         }
-        
+
         Ok(Self {
             config,
             project_root,

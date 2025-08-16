@@ -18,7 +18,12 @@
       "Bash(rm:*)",
       "WebSearch",
       "WebFetch(domain:rust.testcontainers.org)",
-      "WebFetch(domain:docs.rs)"
+      "WebFetch(domain:docs.rs)",
+      "Bash(timeout 300 cargo test --package pyst test_full_dev_setup)",
+      "Bash(timeout 300 cargo test --package pyst test_full_dev_setup -- --nocapture)",
+      "Bash(chmod:*)",
+      "Bash(docker build:*)",
+      "Bash(./scripts/test-ci-locally.sh:*)"
     ],
     "defaultMode": "acceptEdits"
   }

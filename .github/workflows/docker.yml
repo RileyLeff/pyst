@@ -1,0 +1,51 @@
+name: Docker Multi-Platform Build
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'pyst/tests/containers/Dockerfile'
+      - '.github/workflows/docker.yml'
+  pull_request:
+    paths:
+      - 'pyst/tests/containers/Dockerfile'
+      - '.github/workflows/docker.yml'
+
+jobs:
+  build-docker:
+    name: Build Multi-Platform Docker Image
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build multi-platform image
+      uses: docker/build-push-action@v5
+      with:
+        context: pyst/tests/containers
+        platforms: linux/amd64,linux/arm64
+        push: false
+        tags: pyst-test:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    
+    - name: Test AMD64 image
+      run: |
+        docker run --rm --platform linux/amd64 pyst-test:latest sh -c "
+          rustc --version && 
+          cargo --version && 
+          uv --version && 
+          python --version
+        "
+    
+    - name: Test ARM64 image (if available)
+      run: |
+        docker run --rm --platform linux/arm64 pyst-test:latest sh -c "
+          rustc --version && 
+          cargo --version && 
+          uv --version && 
+          python --version
+        " || echo "ARM64 emulation not available, skipping"

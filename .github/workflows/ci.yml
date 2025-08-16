@@ -1,0 +1,273 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Fast checks that don't require containers
+  quick-checks:
+    name: Quick Checks
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+    
+    - name: Cache Rust dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+    
+    - name: Clippy
+      run: cargo clippy --all-targets --all-features -- -D warnings
+    
+    - name: Check
+      run: cargo check --all-targets --all-features
+
+  # Native tests across platforms - tests compilation and basic runtime behavior  
+  native-tests:
+    name: Native Tests (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS Intel
+          - os: macos-13
+            target: x86_64-apple-darwin
+            platform: macos-intel
+          
+          # macOS Apple Silicon  
+          - os: macos-14
+            target: aarch64-apple-darwin
+            platform: macos-arm64
+          
+          # Windows x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows-x64
+          
+          # Linux x86_64 (native, not containerized)
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x64
+          
+          # Linux ARM64 (cross-compilation only)
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            platform: linux-arm64
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+    
+    - name: Install Python (for basic integration tests)
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+      if: matrix.target != 'aarch64-unknown-linux-gnu'
+    
+    - name: Install uv (for basic integration tests)
+      run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      if: matrix.target != 'aarch64-unknown-linux-gnu'
+    
+    - name: Cache Rust dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ matrix.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Install cross-compilation tools (Linux ARM64)
+      if: matrix.target == 'aarch64-unknown-linux-gnu'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-aarch64-linux-gnu
+        echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+    
+    - name: Build
+      run: cargo build --target ${{ matrix.target }} --verbose
+    
+    - name: Run unit tests
+      # Skip cross-compilation tests for now
+      if: matrix.target != 'aarch64-unknown-linux-gnu'
+      run: cargo test --target ${{ matrix.target }} --lib --bins --verbose
+    
+    - name: Run basic integration tests (native)
+      # Test pyst commands natively to catch platform-specific issues
+      if: matrix.target != 'aarch64-unknown-linux-gnu'
+      run: cargo test --target ${{ matrix.target }} --test integration_tests --verbose
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: pyst-${{ matrix.platform }}
+        path: |
+          target/${{ matrix.target }}/debug/pyst*
+          target/${{ matrix.target }}/release/pyst*
+        if-no-files-found: warn
+
+  # Container-based comprehensive tests (Linux only)
+  # These test pyst's core logic in isolated, reproducible environments
+  container-tests:
+    name: Container Tests (Linux)
+    runs-on: ubuntu-latest
+    needs: quick-checks
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache Rust dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-container-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Build optimized Docker image
+      run: |
+        cd pyst/tests/containers
+        docker build --tag pyst-test:latest --progress=plain .
+    
+    - name: Verify Docker image
+      run: |
+        docker run --rm pyst-test:latest sh -c 'rustc --version && cargo --version && uv --version && python --version'
+    
+    - name: Run container infrastructure tests
+      run: cargo test --package pyst containers -- --nocapture
+    
+    - name: Run comprehensive integration tests
+      run: cargo test --package pyst integration -- --nocapture
+      timeout-minutes: 15
+    
+    - name: Run optimized workflow test
+      run: cargo test --package pyst test_optimized_pyst_workflow -- --nocapture
+      timeout-minutes: 10
+    
+    - name: Clean up Docker resources
+      if: always()
+      run: |
+        docker container prune -f
+        docker image prune -f
+
+  # Full end-to-end test (slower, comprehensive)
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    needs: [quick-checks, native-tests, container-tests]
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'full-test')
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache Rust dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-e2e-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Build optimized Docker image
+      run: |
+        cd pyst/tests/containers
+        docker build --tag pyst-test:latest --progress=plain .
+    
+    - name: Run comprehensive end-to-end test
+      run: cargo test --package pyst test_full_dev_setup -- --nocapture
+      timeout-minutes: 20
+    
+    - name: Clean up Docker resources
+      if: always()
+      run: |
+        docker container prune -f
+        docker image prune -f
+
+  # Security audit
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions-rs/audit-check@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Code coverage (optional)
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    needs: quick-checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: llvm-tools-preview
+    
+    - name: Install cargo-llvm-cov
+      uses: taiki-e/install-action@cargo-llvm-cov
+    
+    - name: Cache Rust dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Generate coverage report
+      run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: lcov.info
+        fail_ci_if_error: true

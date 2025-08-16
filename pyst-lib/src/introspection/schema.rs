@@ -11,7 +11,7 @@ pub struct IntrospectionResult {
     pub metadata: ScriptMetadata,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ScriptMetadata {
     pub name: String,
     pub path: String,
@@ -124,23 +124,4 @@ pub enum ErrorType {
     TypeError,
     RuntimeError,
     PermissionDenied,
-}
-
-impl Default for ScriptMetadata {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            path: String::new(),
-            description: None,
-            docstring: None,
-            pep723_metadata: None,
-            dependencies: Vec::new(),
-            entry_points: Vec::new(),
-            functions: Vec::new(),
-            classes: Vec::new(),
-            imports: Vec::new(),
-            cli_framework: None,
-            errors: Vec::new(),
-        }
-    }
 }

@@ -12,10 +12,13 @@ Status at a glance
 - Implemented
   - Discovery of `.py` scripts (project `.pyst/` and global dirs)
   - Execution via `uv run` with real-time stdout/stderr
-  - Argument forwarding (with safe `--` handling)
+  - Argument forwarding (with consistent `--` handling in dry-run and execution)
   - Working directory policy (project/script/current/custom)
   - Context rules (last-match-wins, with negation)
   - Introspection (safe AST mode) + JSON schema + caching with --no-cache
+  - Offline mode support with proper CLI override propagation
+  - Exit code mapping (102 for network-required failures in offline mode)
+  - Cache validation using correct Python environment (uv-managed)
   - Basic install/uninstall/update (GitHub repo/gist/raw URL) + manifest
   - JSON output for `list`; `info`, `which`, `explain`
   - Shell completions (bash, zsh)
@@ -254,7 +257,8 @@ Troubleshooting
 - uv not found
   - Install uv and ensure it’s on PATH: https://astral.sh/uv/
 - Offline failures
-  - When `--offline` (or `PYST_OFFLINE=1`) is set and dependencies are not hydrated, runs will fail. Re-run without offline to allow uv to resolve environments.
+  - When `--offline` (or `PYST_OFFLINE=1`) is set and dependencies are not hydrated, runs will fail with exit code 102. Re-run without offline to allow uv to resolve environments.
+  - The `--offline` flag now properly affects all operations including introspection and caching.
 - Nothing listed
   - Ensure scripts exist in `.pyst/` (project) or in your configured global dirs.
 - Duplicate entries in list

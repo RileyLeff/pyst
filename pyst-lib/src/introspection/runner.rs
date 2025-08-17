@@ -104,29 +104,60 @@ impl IntrospectionRunner {
         &mut self,
         script_paths: &[PathBuf],
     ) -> Result<Vec<IntrospectionResult>> {
-        let mut results = Vec::new();
-
-        for script_path in script_paths {
-            match self.introspect(script_path) {
-                Ok(result) => results.push(result),
-                Err(e) => {
-                    eprintln!(
-                        "Warning: Failed to introspect {}: {}",
-                        script_path.display(),
-                        e
-                    );
-                    // Create minimal error result
-                    results.push(IntrospectionResult {
-                        schema_version: crate::introspection::schema::SCHEMA_VERSION.to_string(),
-                        python_version: "Unknown".to_string(),
-                        script_hash: "error".to_string(),
-                        metadata: Default::default(),
-                    });
+        // If only one script or few scripts, use individual introspection to hit cache
+        if script_paths.len() <= 3 {
+            let mut results = Vec::new();
+            for script_path in script_paths {
+                match self.introspect(script_path) {
+                    Ok(result) => results.push(result),
+                    Err(e) => {
+                        eprintln!(
+                            "Warning: Failed to introspect {}: {}",
+                            script_path.display(),
+                            e
+                        );
+                        // Create minimal error result
+                        results.push(IntrospectionResult {
+                            schema_version: crate::introspection::schema::SCHEMA_VERSION.to_string(),
+                            python_version: "Unknown".to_string(),
+                            script_hash: "error".to_string(),
+                            metadata: Default::default(),
+                        });
+                    }
                 }
             }
+            return Ok(results);
         }
 
-        Ok(results)
+        // For larger batches, try the optimized batch mode first
+        match self.run_batch_introspection(script_paths) {
+            Ok(results) => Ok(results),
+            Err(e) => {
+                eprintln!("Warning: Batch introspection failed ({}), falling back to individual processing", e);
+                // Fall back to individual processing
+                let mut results = Vec::new();
+                for script_path in script_paths {
+                    match self.introspect(script_path) {
+                        Ok(result) => results.push(result),
+                        Err(e) => {
+                            eprintln!(
+                                "Warning: Failed to introspect {}: {}",
+                                script_path.display(),
+                                e
+                            );
+                            // Create minimal error result
+                            results.push(IntrospectionResult {
+                                schema_version: crate::introspection::schema::SCHEMA_VERSION.to_string(),
+                                python_version: "Unknown".to_string(),
+                                script_hash: "error".to_string(),
+                                metadata: Default::default(),
+                            });
+                        }
+                    }
+                }
+                Ok(results)
+            }
+        }
     }
 
     pub fn invalidate_cache(&mut self, script_path: &Path) -> Result<()> {
@@ -212,6 +243,43 @@ impl IntrospectionRunner {
         let result: IntrospectionResult = serde_json::from_str(&stdout)?;
 
         Ok(result)
+    }
+
+    fn run_batch_introspection(
+        &self,
+        script_paths: &[PathBuf],
+    ) -> Result<Vec<IntrospectionResult>> {
+        let introspector_path = self.get_introspector_path()?;
+
+        // Serialize script paths to JSON
+        let paths_json: Vec<String> = script_paths.iter().map(|p| p.to_string_lossy().to_string()).collect();
+        let batch_json = serde_json::to_string(&paths_json)?;
+
+        let mut cmd = Command::new("uv");
+        cmd.arg("run")
+            .arg(&introspector_path)
+            .arg("--batch")
+            .arg(&batch_json)
+            .arg("--mode")
+            .arg("safe"); // For now, always use safe mode in batch
+
+        // Apply offline mode if configured or overridden
+        let is_offline = self.offline_override.unwrap_or(self.config.core.offline);
+        if is_offline {
+            cmd.env("UV_NO_NETWORK", "1");
+        }
+
+        let output = cmd.output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow!("Batch introspection failed: {}", stderr));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let results: Vec<IntrospectionResult> = serde_json::from_str(&stdout)?;
+
+        Ok(results)
     }
 
     fn get_introspector_path(&self) -> Result<PathBuf> {

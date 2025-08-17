@@ -418,6 +418,12 @@ async fn handle_list(
         }
         ListFormat::Markdown => {
             println!("# Available Scripts\n");
+            
+            // Table header
+            println!("| Name | Origin | Enabled | Summary |");
+            println!("|------|--------|---------|---------|");
+            
+            // Table rows
             for (script, introspection) in scripts.iter().zip(introspection_results.iter()) {
                 let scope = if script.is_local { "local" } else { "global" };
                 let enabled = context
@@ -429,17 +435,16 @@ async fn handle_list(
                     continue;
                 }
 
-                let status = if enabled { "" } else { " *(disabled)*" };
-                let description = introspection.metadata.description.as_deref().unwrap_or("");
-
-                if description.is_empty() {
-                    println!("- **{}** ({}){}", script.name, scope, status);
-                } else {
-                    println!(
-                        "- **{}** ({}) - {}{}",
-                        script.name, scope, description, status
-                    );
-                }
+                let enabled_status = if enabled { "✅" } else { "❌" };
+                let description = introspection.metadata.description.as_deref().unwrap_or("-");
+                
+                // Escape pipe characters in description to avoid breaking table
+                let escaped_description = description.replace("|", "\\|");
+                
+                println!(
+                    "| `{}` | {} | {} | {} |",
+                    script.name, scope, enabled_status, escaped_description
+                );
             }
         }
     }
@@ -468,16 +473,30 @@ async fn handle_run(
     if !force {
         let active_context =
             std::env::var("PYST_CONTEXT").unwrap_or_else(|_| "default".to_string());
-        let is_enabled = context
+        let evaluation = context
             .config
             .contexts
-            .is_script_enabled(&active_context, &script_info.name);
+            .evaluate_script(&active_context, &script_info.name);
 
-        if !is_enabled {
+        if !evaluation.enabled {
             println!(
                 "Script '{}' is disabled in context '{}'",
                 script_info.name, active_context
             );
+            
+            // Show the final rule that caused the blocking
+            if let Some(final_rule) = &evaluation.final_rule {
+                let rule_type = if final_rule.is_negation {
+                    "exclusion"
+                } else {
+                    "inclusion"
+                };
+                println!(
+                    "Blocked by {} rule: '{}'",
+                    rule_type, final_rule.pattern
+                );
+            }
+            
             println!(
                 "Use --force to bypass context rules, or run 'pyst explain {}' for details",
                 script_info.name

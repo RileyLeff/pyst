@@ -27,8 +27,12 @@
       "Bash(pyst)",
       "Bash(pyst cache:*)",
       "Bash(pyst list:*)",
-      "Bash(pyst run:*)"
+      "Bash(pyst run:*)",
+      "Bash(grep:*)"
     ],
-    "defaultMode": "acceptEdits"
+    "defaultMode": "acceptEdits",
+    "additionalDirectories": [
+      "/Users/rileyleff/Library"
+    ]
   }
 }

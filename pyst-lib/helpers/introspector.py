@@ -180,6 +180,33 @@ class SafeIntrospector:
         
         return dependencies
     
+    def _has_click_decorator(self, decorator_list) -> bool:
+        """Check if a function has a Click decorator."""
+        for decorator in decorator_list:
+            # Handle @click.command (ast.Attribute)
+            if isinstance(decorator, ast.Attribute):
+                if (isinstance(decorator.value, ast.Name) and 
+                    decorator.value.id == "click" and 
+                    decorator.attr == "command"):
+                    return True
+            # Handle function calls: @click.command() or @command()
+            elif isinstance(decorator, ast.Call):
+                # @click.command() (ast.Call with ast.Attribute func)
+                if (isinstance(decorator.func, ast.Attribute) and
+                    isinstance(decorator.func.value, ast.Name) and
+                    decorator.func.value.id == "click" and
+                    decorator.func.attr == "command"):
+                    return True
+                # @command() (called directly)
+                elif (isinstance(decorator.func, ast.Name) and
+                      decorator.func.id == "command"):
+                    return True
+            # Handle @command (imported directly as name)
+            elif isinstance(decorator, ast.Name):
+                if decorator.id == "command":
+                    return True
+        return False
+
     def _extract_entry_points(self) -> List[Dict[str, Any]]:
         """Extract potential entry points."""
         entry_points = []
@@ -196,7 +223,7 @@ class SafeIntrospector:
                         "module": None,
                         "entry_type": "Main"
                     })
-                elif any(decorator.id == "click.command" if isinstance(decorator, ast.Attribute) else False for decorator in node.decorator_list):
+                elif self._has_click_decorator(node.decorator_list):
                     entry_points.append({
                         "name": node.name,
                         "callable": node.name,
@@ -415,37 +442,88 @@ def get_python_version() -> str:
 
 def main():
     parser = argparse.ArgumentParser(description="Pyst Script Introspector")
-    parser.add_argument("script_path", type=Path, help="Path to script to introspect")
+    parser.add_argument("script_path", type=Path, nargs='?', help="Path to script to introspect")
     parser.add_argument("--mode", choices=["safe", "import"], default="safe", 
                        help="Introspection mode")
+    parser.add_argument("--batch", type=str, help="JSON list of script paths for batch processing")
     parser.add_argument("--output", type=Path, help="Output file (default: stdout)")
     
     args = parser.parse_args()
     
-    if not args.script_path.exists():
-        print(f"Error: Script not found: {args.script_path}", file=sys.stderr)
-        sys.exit(1)
+    if args.batch:
+        # Batch mode: process multiple scripts
+        try:
+            script_paths = json.loads(args.batch)
+            if not isinstance(script_paths, list):
+                print("Error: --batch argument must be a JSON list", file=sys.stderr)
+                sys.exit(1)
+            
+            results = []
+            for script_path_str in script_paths:
+                script_path = Path(script_path_str)
+                if not script_path.exists():
+                    print(f"Warning: Script not found: {script_path}", file=sys.stderr)
+                    continue
+                
+                # Choose introspector based on mode
+                if args.mode == "import":
+                    introspector = ImportIntrospector(script_path)
+                else:
+                    introspector = SafeIntrospector(script_path)
+                
+                # Perform introspection
+                metadata = introspector.introspect()
+                
+                # Create result for this script
+                result = {
+                    "schema_version": SCHEMA_VERSION,
+                    "python_version": get_python_version(),
+                    "script_hash": calculate_script_hash(script_path),
+                    "metadata": metadata
+                }
+                results.append(result)
+            
+            # Output all results as JSON array
+            output_json = json.dumps(results, indent=2, ensure_ascii=False)
+            
+        except json.JSONDecodeError as e:
+            print(f"Error: Invalid JSON in --batch argument: {e}", file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error in batch processing: {e}", file=sys.stderr)
+            sys.exit(1)
     
-    # Choose introspector based on mode
-    if args.mode == "import":
-        introspector = ImportIntrospector(args.script_path)
     else:
-        introspector = SafeIntrospector(args.script_path)
+        # Single script mode (original behavior)
+        if not args.script_path:
+            print("Error: script_path is required when not using --batch", file=sys.stderr)
+            sys.exit(1)
+            
+        if not args.script_path.exists():
+            print(f"Error: Script not found: {args.script_path}", file=sys.stderr)
+            sys.exit(1)
+        
+        # Choose introspector based on mode
+        if args.mode == "import":
+            introspector = ImportIntrospector(args.script_path)
+        else:
+            introspector = SafeIntrospector(args.script_path)
+        
+        # Perform introspection
+        metadata = introspector.introspect()
+        
+        # Create result
+        result = {
+            "schema_version": SCHEMA_VERSION,
+            "python_version": get_python_version(),
+            "script_hash": calculate_script_hash(args.script_path),
+            "metadata": metadata
+        }
+        
+        # Output result
+        output_json = json.dumps(result, indent=2, ensure_ascii=False)
     
-    # Perform introspection
-    metadata = introspector.introspect()
-    
-    # Create result
-    result = {
-        "schema_version": SCHEMA_VERSION,
-        "python_version": get_python_version(),
-        "script_hash": calculate_script_hash(args.script_path),
-        "metadata": metadata
-    }
-    
-    # Output result
-    output_json = json.dumps(result, indent=2, ensure_ascii=False)
-    
+    # Write output
     if args.output:
         args.output.write_text(output_json, encoding='utf-8')
     else:

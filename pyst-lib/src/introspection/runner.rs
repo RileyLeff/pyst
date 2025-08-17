@@ -42,7 +42,11 @@ impl IntrospectionRunner {
         })
     }
 
-    pub fn new_with_overrides(config: Config, no_cache: bool, offline_override: Option<bool>) -> Result<Self> {
+    pub fn new_with_overrides(
+        config: Config,
+        no_cache: bool,
+        offline_override: Option<bool>,
+    ) -> Result<Self> {
         let cache = Cache::new(&config)?;
         let trusted_paths = Self::load_trusted_paths(&config)?;
 

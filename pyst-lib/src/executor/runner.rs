@@ -96,11 +96,12 @@ impl Executor {
             };
 
             // Use same separator logic as actual execution
-            let separator = if !uv_flags.is_empty() && !args.is_empty() && Self::needs_separator(args) {
-                " --"
-            } else {
-                ""
-            };
+            let separator =
+                if !uv_flags.is_empty() && !args.is_empty() && Self::needs_separator(args) {
+                    " --"
+                } else {
+                    ""
+                };
 
             println!(
                 "Would execute: uv run{} {}{}{}{}{}{}{}",

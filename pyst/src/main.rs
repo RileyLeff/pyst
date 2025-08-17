@@ -308,7 +308,7 @@ async fn handle_list(
 
     // Get introspection data for enhanced output
     let mut runner =
-        IntrospectionRunner::new_with_no_cache(context.config.clone(), cli_overrides.no_cache)?;
+        IntrospectionRunner::new_with_overrides(context.config.clone(), cli_overrides.no_cache, cli_overrides.offline)?;
     let script_paths: Vec<_> = scripts.iter().map(|s| s.path.clone()).collect();
     let introspection_results = runner.introspect_batch(&script_paths)?;
 
@@ -465,7 +465,7 @@ async fn handle_info(
 
     // Get enhanced introspection data
     let mut runner =
-        IntrospectionRunner::new_with_no_cache(context.config.clone(), cli_overrides.no_cache)?;
+        IntrospectionRunner::new_with_overrides(context.config.clone(), cli_overrides.no_cache, cli_overrides.offline)?;
     let introspection = runner.introspect(&script_info.path)?;
 
     // Check context status
@@ -724,7 +724,7 @@ async fn handle_trust(
     use pyst_lib::introspection::runner::IntrospectionRunner;
 
     let mut runner =
-        IntrospectionRunner::new_with_no_cache(context.config.clone(), cli_overrides.no_cache)?;
+        IntrospectionRunner::new_with_overrides(context.config.clone(), cli_overrides.no_cache, cli_overrides.offline)?;
     let target_path = std::path::PathBuf::from(target);
 
     if !target_path.exists() {
@@ -784,7 +784,7 @@ async fn handle_cache(
     use pyst_lib::introspection::runner::IntrospectionRunner;
 
     let mut runner =
-        IntrospectionRunner::new_with_no_cache(context.config.clone(), cli_overrides.no_cache)?;
+        IntrospectionRunner::new_with_overrides(context.config.clone(), cli_overrides.no_cache, cli_overrides.offline)?;
 
     match action {
         CacheAction::Clear => {

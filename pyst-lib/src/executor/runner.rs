@@ -95,14 +95,23 @@ impl Executor {
                 ""
             };
 
+            // Use same separator logic as actual execution
+            let separator = if !uv_flags.is_empty() && !args.is_empty() && Self::needs_separator(args) {
+                " --"
+            } else {
+                ""
+            };
+
             println!(
-                "Would execute: uv run{} {} -- {}{}{}{}",
+                "Would execute: uv run{} {}{}{}{}{}{}{}",
                 if uv_flags.is_empty() {
                     ""
                 } else {
                     &format!(" {}", uv_flags.join(" "))
                 },
                 script_path.display(),
+                separator,
+                if args.is_empty() { "" } else { " " },
                 args.join(" "),
                 cwd_info,
                 uv_flags_info,
@@ -124,6 +133,9 @@ impl Executor {
             let exit_code = status.code().unwrap_or(1);
             if exit_code == 127 {
                 Ok(ExitCode::ScriptNotFound)
+            } else if self.is_offline_mode() {
+                // If offline mode is active and uv exits nonzero, likely network-related
+                Ok(ExitCode::NetworkRequired)
             } else {
                 Ok(ExitCode::GenericError)
             }

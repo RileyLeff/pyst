@@ -180,15 +180,26 @@ impl Cache {
     }
 
     fn get_python_version() -> Result<String> {
-        let output = std::process::Command::new("python3")
-            .args(["--version"])
+        // Use uv run to match the environment that introspection actually uses
+        let output = std::process::Command::new("uv")
+            .args(["run", "python", "--version"])
             .output()?;
 
         if output.status.success() {
             let version = String::from_utf8_lossy(&output.stdout);
             Ok(version.trim().to_string())
         } else {
-            Err(anyhow!("Failed to get Python version"))
+            // Fallback to system python3 if uv is not available
+            let output = std::process::Command::new("python3")
+                .args(["--version"])
+                .output()?;
+
+            if output.status.success() {
+                let version = String::from_utf8_lossy(&output.stdout);
+                Ok(version.trim().to_string())
+            } else {
+                Err(anyhow!("Failed to get Python version"))
+            }
         }
     }
 

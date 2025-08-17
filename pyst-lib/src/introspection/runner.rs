@@ -12,6 +12,7 @@ pub struct IntrospectionRunner {
     cache: Cache,
     trusted_paths: HashSet<PathBuf>,
     no_cache: bool,
+    offline_override: Option<bool>,
 }
 
 impl IntrospectionRunner {
@@ -24,6 +25,7 @@ impl IntrospectionRunner {
             cache,
             trusted_paths,
             no_cache: false,
+            offline_override: None,
         })
     }
 
@@ -36,6 +38,20 @@ impl IntrospectionRunner {
             cache,
             trusted_paths,
             no_cache,
+            offline_override: None,
+        })
+    }
+
+    pub fn new_with_overrides(config: Config, no_cache: bool, offline_override: Option<bool>) -> Result<Self> {
+        let cache = Cache::new(&config)?;
+        let trusted_paths = Self::load_trusted_paths(&config)?;
+
+        Ok(Self {
+            config,
+            cache,
+            trusted_paths,
+            no_cache,
+            offline_override,
         })
     }
 
@@ -158,8 +174,9 @@ impl IntrospectionRunner {
             .arg("--mode")
             .arg(mode.to_string());
 
-        // Apply offline mode if configured
-        if self.config.core.offline {
+        // Apply offline mode if configured or overridden
+        let is_offline = self.offline_override.unwrap_or(self.config.core.offline);
+        if is_offline {
             cmd.env("UV_NO_NETWORK", "1");
         }
 

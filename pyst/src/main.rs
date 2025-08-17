@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 use pyst_lib::{CliOverrides, Context, Discovery, Executor, ExitCode};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process;
 
@@ -208,6 +209,41 @@ enum McpTransport {
     Tcp,
 }
 
+fn deduplicate_scripts(scripts: Vec<pyst_lib::ScriptInfo>, precedence: &str) -> Vec<pyst_lib::ScriptInfo> {
+    let mut effective_scripts: HashMap<String, pyst_lib::ScriptInfo> = HashMap::new();
+    
+    for script in scripts {
+        let name = script.name.clone();
+        
+        match effective_scripts.get(&name) {
+            None => {
+                // First script with this name
+                effective_scripts.insert(name, script);
+            }
+            Some(existing) => {
+                // Duplicate name - apply precedence rules
+                let should_replace = match precedence {
+                    "local" => {
+                        // Local wins over global
+                        script.is_local && !existing.is_local
+                    }
+                    "global" => {
+                        // Global wins over local
+                        !script.is_local && existing.is_local
+                    }
+                    _ => false, // Default to keeping first found
+                };
+                
+                if should_replace {
+                    effective_scripts.insert(name, script);
+                }
+            }
+        }
+    }
+    
+    effective_scripts.into_values().collect()
+}
+
 #[tokio::main]
 async fn main() {
     let result = run().await;
@@ -304,6 +340,11 @@ async fn handle_list(
             };
             scripts.push(script_info);
         }
+    }
+
+    // Apply deduplication unless --all is specified
+    if !all {
+        scripts = deduplicate_scripts(scripts, &context.config.core.precedence);
     }
 
     // Get introspection data for enhanced output
@@ -417,7 +458,10 @@ async fn handle_run(
     let discovery = Discovery::new(context.config.clone());
     let script_info = match discovery.resolve_script(script, context.project_root.as_deref()) {
         Ok(info) => info,
-        Err(_) => return Ok(ExitCode::ScriptNotFound),
+        Err(_) => {
+            eprintln!("Script '{}' not found. Try `pyst list` or specify `project:`/`global:` explicitly.", script);
+            return Ok(ExitCode::ScriptNotFound);
+        }
     };
 
     // Check context rules unless --force is used

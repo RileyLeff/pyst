@@ -220,6 +220,12 @@ impl Discovery {
             }
         }
 
+        // If not found by normal discovery, check installed scripts by manifest
+        let installed_scripts = self.list_installed_as_scripts()?;
+        if let Some(script) = installed_scripts.into_iter().find(|s| s.name == name) {
+            return Ok(script);
+        }
+
         Err(anyhow!("Script not found: {}", name))
     }
 
@@ -244,5 +250,30 @@ impl Discovery {
         }
 
         Err(anyhow!("Global script not found: {}", name))
+    }
+
+    fn list_installed_as_scripts(&self) -> Result<Vec<ScriptInfo>> {
+        let mut scripts = Vec::new();
+        
+        // Get the data directory where installed scripts are stored
+        if let Ok(data_dir) = self.config.get_data_dir() {
+            let install_dir = data_dir.join("scripts");
+            let installer = crate::install::Installer::new(install_dir);
+            
+            if let Ok(installed_scripts) = installer.list_installed() {
+                for installed in installed_scripts {
+                    let script_info = ScriptInfo {
+                        name: installed.name,
+                        path: installed.install_path,
+                        is_local: false, // Installed scripts are global
+                        description: None,
+                        entry_point: EntryPoint::Unknown,
+                    };
+                    scripts.push(script_info);
+                }
+            }
+        }
+        
+        Ok(scripts)
     }
 }

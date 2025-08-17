@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CacheEntry {
+    pub path: String,
     pub file_hash: String,
     pub dependency_hash: String,
     pub python_version: String,
@@ -76,6 +77,7 @@ impl Cache {
         let python_version = Self::get_python_version()?;
 
         let entry = CacheEntry {
+            path: script_path.to_string_lossy().to_string(),
             file_hash,
             dependency_hash,
             python_version,
@@ -125,13 +127,10 @@ impl Cache {
         let valid_entries = self
             .index
             .entries
-            .iter()
-            .filter(|(key, entry)| {
-                if let Ok(script_path) = self.key_to_path(key) {
-                    self.is_cache_valid(&script_path, entry).unwrap_or(false)
-                } else {
-                    false
-                }
+            .values()
+            .filter(|entry| {
+                let script_path = PathBuf::from(&entry.path);
+                self.is_cache_valid(&script_path, entry).unwrap_or(false)
             })
             .count();
 
@@ -235,11 +234,6 @@ impl Cache {
         Ok(true)
     }
 
-    fn key_to_path(&self, _key: &str) -> Result<PathBuf> {
-        // This is a simplified version - in practice we'd need to store
-        // the path in the cache entry or use a different approach
-        Err(anyhow!("Cannot reverse engineer path from key"))
-    }
 
     fn load_index(path: &Path) -> Result<CacheIndex> {
         let content = fs::read_to_string(path)?;

@@ -3,9 +3,25 @@ use crate::introspection::runner::IntrospectionRunner;
 use crate::introspection::schema::IntrospectionResult;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+// Embed the documenter script at compile time
+const DOCUMENTER_SRC: &str = include_str!("../../helpers/documenter.py");
+
+fn ensure_documenter_installed(config: &Config) -> Result<PathBuf> {
+    let helpers_dir = config.get_data_dir()?.join("helpers");
+    fs::create_dir_all(&helpers_dir)?;
+    let target = helpers_dir.join("documenter.py");
+
+    // Write only if missing or stale (for now, just check if exists)
+    if !target.exists() {
+        fs::write(&target, DOCUMENTER_SRC.as_bytes())?;
+    }
+    Ok(target)
+}
 
 #[derive(Debug, Serialize)]
 struct DocumentationRequest {
@@ -190,13 +206,17 @@ impl Documenter {
     }
 
     fn find_documenter_helper(&self) -> Result<PathBuf> {
-        // Look for documenter.py in the helpers directory relative to the library
+        // 1) Use embedded helper at the platform data dir
+        if let Ok(path) = ensure_documenter_installed(&self.config) {
+            return Ok(path);
+        }
+
+        // 2) Dev fallbacks (workspace-relative) remain as last resort
         let current_exe = std::env::current_exe()?;
         let exe_dir = current_exe
             .parent()
             .ok_or_else(|| anyhow!("Cannot find executable directory"))?;
 
-        // Try different possible locations
         let possible_paths = vec![
             exe_dir.join("../pyst-lib/helpers/documenter.py"),
             exe_dir.join("../../pyst-lib/helpers/documenter.py"),

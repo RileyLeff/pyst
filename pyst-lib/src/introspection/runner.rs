@@ -4,8 +4,25 @@ use crate::introspection::schema::IntrospectionResult;
 use anyhow::{anyhow, Result};
 use std::collections::HashSet;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+// Embed the introspector script at compile time
+const INTROSPECTOR_SRC: &str = include_str!("../../helpers/introspector.py");
+
+fn ensure_introspector_installed(config: &Config) -> Result<PathBuf> {
+    let helpers_dir = config.get_data_dir()?.join("helpers");
+    fs::create_dir_all(&helpers_dir)?;
+    let target = helpers_dir.join("introspector.py");
+
+    // Write only if missing or stale (for now, just check if exists)
+    if !target.exists() {
+        let mut file = fs::File::create(&target)?;
+        file.write_all(INTROSPECTOR_SRC.as_bytes())?;
+    }
+    Ok(target)
+}
 
 pub struct IntrospectionRunner {
     config: Config,
@@ -198,13 +215,17 @@ impl IntrospectionRunner {
     }
 
     fn get_introspector_path(&self) -> Result<PathBuf> {
-        // Look for introspector.py relative to the current executable
+        // 1) Use embedded helper at the platform data dir
+        if let Ok(path) = ensure_introspector_installed(&self.config) {
+            return Ok(path);
+        }
+
+        // 2) Dev fallbacks (workspace-relative) remain as last resort
         let current_exe = std::env::current_exe()?;
         let exe_dir = current_exe
             .parent()
             .ok_or_else(|| anyhow!("Cannot find executable directory"))?;
 
-        // Check in various locations
         let possible_paths = [
             exe_dir.join("../pyst-lib/helpers/introspector.py"),
             exe_dir.join("helpers/introspector.py"),

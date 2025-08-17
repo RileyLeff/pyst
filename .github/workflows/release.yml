@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggered when version tags are pushed
+
+jobs:
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: Release ${{ github.ref_name }}
+        draft: false
+        prerelease: ${{ contains(github.ref_name, '-') }}  # Mark as prerelease if tag contains '-' (e.g., v1.0.0-beta)
+        body: |
+          ## Changes in ${{ github.ref_name }}
+          
+          See the [changelog](CHANGELOG.md) for details.
+          
+          ## Installation
+          
+          ```bash
+          cargo install --git https://github.com/rileyleff/pyst --tag ${{ github.ref_name }}
+          ```
+          
+          ---
+          
+          🚀 **Built with pyst** - A modern, ergonomic command runner for Python scripts

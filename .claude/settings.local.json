@@ -23,7 +23,11 @@
       "Bash(timeout 300 cargo test --package pyst test_full_dev_setup -- --nocapture)",
       "Bash(chmod:*)",
       "Bash(docker build:*)",
-      "Bash(./scripts/test-ci-locally.sh:*)"
+      "Bash(./scripts/test-ci-locally.sh:*)",
+      "Bash(pyst)",
+      "Bash(pyst cache:*)",
+      "Bash(pyst list:*)",
+      "Bash(pyst run:*)"
     ],
     "defaultMode": "acceptEdits"
   }

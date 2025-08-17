@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CacheEntry {
+    #[serde(default)]
     pub path: String,
     pub file_hash: String,
     pub dependency_hash: String,
@@ -129,6 +130,10 @@ impl Cache {
             .entries
             .values()
             .filter(|entry| {
+                // Skip entries without path (from old cache format)
+                if entry.path.is_empty() {
+                    return false;
+                }
                 let script_path = PathBuf::from(&entry.path);
                 self.is_cache_valid(&script_path, entry).unwrap_or(false)
             })

@@ -1,349 +1,286 @@
-# pyst 🐍⚡
+# pyst
 
-An ergonomic command runner for humans and LLMs. It's like [Just](https://github.com/casey/just), but for python, with [uv](https://github.com/astral-sh/uv) handling the dependency management for you behind the scenes.
+A modern, ergonomic command runner for Python scripts. Turn local and global `.py` files into a fast, discoverable toolset. Powered by uv for isolation and speed.
 
-```bash
-# Discover and run scripts effortlessly
-pyst list                    # See all available scripts
-pyst run hello               # Execute with automatic dependency management
-pyst install github.com/user/repo  # Share scripts across projects
-pyst document script.py      # AI-powered documentation generation
-```
+- Discover scripts in your project’s `.pyst/` directory and in global script dirs
+- Run with automatic environment resolution via uv
+- Get rich info and JSON output for human and machine use
+- Apply context rules to enable/disable scripts; bypass with --force
+- Install scripts from GitHub/Gists/URLs with a managed manifest
 
-## 🌟 Features
+Status at a glance
+- Implemented
+  - Discovery of `.py` scripts (project `.pyst/` and global dirs)
+  - Execution via `uv run` with real-time stdout/stderr
+  - Argument forwarding (with safe `--` handling)
+  - Working directory policy (project/script/current/custom)
+  - Context rules (last-match-wins, with negation)
+  - Introspection (safe AST mode) + JSON schema + caching with --no-cache
+  - Basic install/uninstall/update (GitHub repo/gist/raw URL) + manifest
+  - JSON output for `list`; `info`, `which`, `explain`
+  - Shell completions (bash, zsh)
+  - MCP server over stdio (text content responses)
+- In progress
+  - More robust argparse/click/typer introspection and batch mode
+  - Context “extends” and provenance in `explain`
+  - PATH shims for installed scripts
+  - MCP structured JSON responses; TCP transport
+  - Document command provider abstraction (beyond current DSPy helper)
+- Planned
+  - Rich CLI parameter discovery across frameworks
+  - Markdown output tables for easy docs export
 
-### 🔍 **Intelligent Script Discovery**
-- Automatic detection of Python scripts in your project and globally
-- Smart entry point detection (PEP 723, Click/Typer, `main()` functions)
-- Respects `.pyst` project directories and `~/.local/share/pyst/scripts` global scripts
+Contents
+- Quick start
+- Installation
+- Usage
+- Configuration
+- Contexts
+- Installing scripts
+- MCP (Model Context Protocol)
+- Testing
+- Exit codes
+- Troubleshooting
+- Contributing
+- License
+- Acknowledgments
 
-### ⚡ **Zero-Config Execution**
-- Leverages `uv` for blazingly fast dependency resolution and execution
-- PEP 723 support for inline script metadata
-- Automatic virtual environment management
-- Works with existing `pyproject.toml` configurations
+Quick start
+- Create a `.pyst/` directory in your project and add a script:
+  ```python
+  # .pyst/hello.py
+  #!/usr/bin/env python3
+  """Say hello from pyst."""
+  # /// script
+  # requires-python = ">=3.8"
+  # ///
 
-### 🎯 **Context-Aware Filtering**
-- Rule-based script enabling/disabling with glob patterns
-- Environment-specific contexts (development, production, etc.)
-- `--force` flag to bypass restrictions when needed
+  if __name__ == "__main__":
+      print("Hello from pyst!")
+  ```
+- List and run:
+  ```bash
+  pyst list
+  pyst run hello
+  ```
 
-### 🌐 **Sharing Ecosystem**
-- Install scripts from GitHub repositories, Gists, or raw URLs
-- Commit pinning for reproducible installations
-- SHA256 integrity verification
-- Simple update and uninstall management
+Installation
 
-### 🤖 **AI-Powered Documentation**
-- Powered by DSPy framework with configurable LLM providers
-- Generates concise, terminal-friendly descriptions
-- Interactive approval workflow with diff preview
-- Guardrails with `.pystdocignore` and inline markers
+Requirements
+- Rust (for building)
+- uv on PATH (for Python execution)
+- Python 3.8+ available (uv can manage interpreters when online)
 
-### 🔌 **MCP Integration for AI Agents**
-- Model Context Protocol (MCP) server for AI agent integration
-- Allows Claude and other AI systems to discover and execute scripts
-- JSON-RPC 2.0 over stdio transport with full MCP compliance
-- Four powerful tools: list_scripts, run_script, get_script_info, explain_script
+Install pyst
+- From the repo:
+  ```bash
+  cargo install --path .    # from a checked-out workspace
+  ```
+- Or from Git:
+  ```bash
+  cargo install --git https://github.com/yourusername/pyst
+  ```
 
-### 🛡️ **Security & Trust**
-- Safe AST-based introspection by default
-- Opt-in import-mode for trusted scripts
-- Sensitive data redaction in configurations
-- Sandboxed subprocess execution
+Usage
 
-## 🚀 Quick Start
+Common commands
+- Discover and run
+  ```bash
+  pyst list
+  pyst run <name> [-- ARGS...]
+  pyst which <name>
+  pyst info <name>
+  pyst explain <name> [--format json]
+  ```
+- Formats and completions
+  ```bash
+  pyst list --format json
+  pyst completions bash | sudo tee /etc/bash_completion.d/pyst
+  ```
+- Cache control
+  ```bash
+  pyst cache path
+  pyst cache clear
+  ```
+- Context control
+  ```bash
+  PYST_CONTEXT=default pyst list
+  pyst run <name> --force
+  ```
 
-### Installation
+Selected flags
+- Global
+  - `--context <CTX>`: set active context (also respects `PYST_CONTEXT`)
+  - `--config <PATH>`: use a specific `pyst.toml`
+  - `--no-cache`: bypass introspection cache for this run
+  - `--offline`: set `UV_NO_NETWORK=1` for child processes (uv)
+  - `--cwd <PATH>`: override working directory for script execution
+  - `--uv-flags "<FLAGS>"`: pass additional flags to uv (CLI > env `PYST_UV_FLAGS` > config)
+  - `--no-color`, `--color=auto|always|never`, `-v/--verbose`, `-q/--quiet` (reserved; minimal logging today)
+- Run-specific
+  - `--force`: bypass context rules
+  - `--dry-run`: print the uv command, cwd, env deltas
 
-```bash
-# Install pyst (requires Rust and uv)
-cargo install --git https://github.com/yourusername/pyst
-```
+Configuration
 
-### Basic Usage
+Where
+- Project: `./.pyst.toml` (nearest ancestor)
+- Global: `~/.config/pyst/pyst.toml` (XDG)
+- Env overrides: see below
 
-```bash
-# List available scripts
-pyst list
-
-# Run a script
-pyst run my-script
-
-# Get detailed information about a script
-pyst info my-script
-
-# Check why a script is enabled/disabled
-pyst explain my-script
-```
-
-### Install Scripts from the Web
-
-```bash
-# Install from GitHub repository
-pyst install https://github.com/user/awesome-scripts
-
-# Install from Gist
-pyst install https://gist.github.com/user/abc123
-
-# Install from raw URL with custom name
-pyst install https://example.com/script.py --as my-tool
-
-# Manage installed scripts
-pyst update my-tool
-pyst uninstall my-tool
-```
-
-### AI Documentation Generation
-
-```bash
-# Set up your API key (OpenRouter + Gemini 2.5 Flash by default)
-export OPENROUTER_API_KEY=your-key-here
-
-# Generate documentation interactively
-pyst document my-script.py
-
-# Write documentation directly
-pyst document my-script.py --write
-
-# Check if documentation exists
-pyst document my-script.py --check
-```
-
-## 📁 Project Structure
-
-```
-your-project/
-├── .pyst.toml              # Project configuration
-├── .pyst/                  # Local scripts directory
-│   ├── deploy.py          # Deployment script
-│   ├── test-runner.py     # Custom test runner
-│   └── .pystdocignore     # Documentation ignore rules
-├── scripts/               # Alternative scripts location
-└── pyproject.toml         # Standard Python project config
-```
-
-## ⚙️ Configuration
-
-Create a `.pyst.toml` file in your project root or globally at `~/.config/pyst/pyst.toml`:
-
+Example `.pyst.toml`
 ```toml
 [core]
-# Script discovery locations
-global_script_dirs = ["~/.local/share/pyst/scripts"]
 project_script_dir = ".pyst"
-precedence = "local"  # local scripts override global ones
-
-# Execution settings
-cwd = "project"      # Run from project root
-introspection = "safe"  # Use AST parsing by default
-offline = false      # Allow network access
+global_script_dirs = ["~/.local/share/pyst/scripts"]
+precedence = "local"        # local wins vs global
+offline = false             # allow network by default
+cwd = "project"             # "project" | "script" | "current" | "/abs/path"
+introspection = "safe"      # "safe" | "import" (import mode only for trusted)
 
 [core.uv]
 flags = ["--python-preference=managed"]
 
 [document]
-# AI documentation settings (OpenRouter + Gemini 2.5 Flash)
+# Current helper uses DSPy + OpenRouter model (optional feature)
 model = "google/gemini-2.5-flash"
 api_key_env = "OPENROUTER_API_KEY"
 api_base = "https://openrouter.ai/api/v1"
 max_tokens = 150
 temperature = 0.7
-redact = ["SECRET_*", "API_KEY_*"]
-
-# Alternative providers:
-# For OpenAI: model = "gpt-4", api_base = "https://api.openai.com/v1"
-# For Anthropic: model = "claude-3-haiku-20240307"
+redact = ["SECRET_*", "API_KEY_*", "PASSWORD_*"]
 
 [contexts]
   [contexts.default]
-  enabled = ["*", "!test-*", "!deploy-prod"]
-  
-  [contexts.production]
-  enabled = ["deploy-*", "monitor-*"]
+  enabled = ["*", "!db-*", "!deploy-prod"]
 ```
 
-## 📝 Script Examples
+Environment overrides
+- `PYST_CONTEXT`, `PYST_OFFLINE`, `PYST_PRECEDENCE`, `PYST_INTROSPECTION`
+- `PYST_PROJECT_SCRIPT_DIR`, `PYST_GLOBAL_SCRIPT_DIRS` (colon-separated)
+- `PYST_UV_FLAGS` (space-separated)
 
-### PEP 723 Script
-```python
-#!/usr/bin/env python3
-"""Database backup utility with progress tracking."""
-# /// script
-# requires-python = ">=3.11"
-# dependencies = [
-#     "psycopg2-binary>=2.9.0",
-#     "rich>=13.0.0"
-# ]
-# ///
+Working directory policy
+- `project` (default): nearest ancestor with `.pyst.toml` else `.git` else current dir
+- `script`: directory of the script
+- `current`: do not change cwd
+- custom path: absolute path
 
-import psycopg2
-from rich.progress import track
+Contexts
 
-def main():
-    # Your backup logic here
-    for table in track(tables, description="Backing up..."):
-        backup_table(table)
+Behavior
+- Rules are glob patterns; last match wins. Use `!pattern` to disable.
+- Applied uniformly to named and path-based runs; `--force` bypasses.
 
-if __name__ == "__main__":
-    main()
-```
-
-### Typer CLI Script
-```python
-#!/usr/bin/env python3
-"""Git repository analyzer with detailed statistics."""
-# /// script
-# dependencies = ["typer>=0.9.0", "pygit2>=1.13.0"]
-# ///
-
-import typer
-from pathlib import Path
-
-app = typer.Typer()
-
-@app.command()
-def analyze(repo_path: Path = typer.Argument(..., help="Path to Git repository")):
-    """Analyze Git repository and show statistics."""
-    typer.echo(f"Analyzing repository: {repo_path}")
-    # Analysis logic here
-
-if __name__ == "__main__":
-    app()
-```
-
-## 🎭 Context Management
-
-Control script execution with powerful context rules:
-
+Examples
 ```bash
-# Set active context
-export PYST_CONTEXT=production
-
-# Only deployment scripts will be enabled
+# default context from file or env
 pyst list
 
-# Override context rules temporarily
-pyst run test-script --force
+# Run disabled script with force
+pyst run db-backup --force
 
-# Understand why a script is disabled
-pyst explain test-script
+# Explain a decision
+pyst explain db-backup --format json
 ```
 
-## 🔒 Security & Trust
+Installing scripts
 
-### Safe Introspection (Default)
+Sources supported
+- GitHub repo: clones the repo and installs all `.py` files (or a specific `blob/.../file.py`)
+- GitHub Gist: installs `.py` files from a gist
+- Raw URL: installs a single `.py` file
+
+Examples
 ```bash
-# Uses AST parsing - secure but limited
-pyst info untrusted-script.py
+pyst install https://github.com/user/repo
+pyst install https://github.com/user/repo/blob/main/tools/hello.py --as greet
+pyst install https://gist.github.com/user/abc123
+pyst install https://example.com/script.py
+pyst list --all
+pyst update greet
+pyst uninstall greet
 ```
 
-### Trusted Script Execution
-```bash
-# Mark scripts/directories as trusted for full introspection
-pyst trust ~/.local/share/pyst/scripts
-pyst trust ./my-script.py
+Notes
+- Installed scripts are treated as global scripts and tracked in a manifest (JSON).
+- If a local script shares the same name, precedence rules apply.
+- PATH shims for direct execution are planned but not implemented yet; use `pyst run <name>`.
 
-# Now import-mode introspection is available
-pyst info my-script.py  # Shows runtime information
-```
+MCP (Model Context Protocol)
 
-### Documentation Guardrails
+- Start server (stdio transport)
+  ```bash
+  pyst mcp
+  ```
+- Tools exposed:
+  - `list_scripts`
+  - `run_script`
+  - `get_script_info`
+  - `explain_script`
+- Responses currently contain human-readable text content; structured JSON responses are planned.
 
-Create `.pystdocignore` to exclude files:
-```
-# Ignore test files
-test_*.py
-*_test.py
+Testing
 
-# Ignore sensitive scripts
-secrets/*.py
-deploy/prod-*.py
-```
+- Native
+  ```bash
+  cargo test --lib --bins
+  cargo test --test integration_tests
+  ```
+- Container-based (Linux; requires Docker)
+  - A prebuilt test image with uv/Rust/Python speeds up integration tests
+  ```bash
+  # Build the optimized image
+  cd pyst/tests/containers
+  docker build -t pyst-test:latest .
 
-Or use inline markers:
-```python
-#!/usr/bin/env python3
-# pyst:doc:ignore
-"""This script won't be documented."""
-```
+  # Back to project root
+  cargo test --package pyst containers -- --nocapture
+  cargo test --package pyst integration -- --nocapture
+  cargo test --package pyst test_optimized_pyst_workflow -- --nocapture
+  ```
 
-## 🔧 Advanced Usage
+Exit codes
 
-### JSON Output for Automation
-```bash
-# Machine-readable script listing
-pyst list --format json | jq '.[] | select(.enabled)'
+- 0: success
+- 1: generic error (e.g., script runtime error)
+- 64: CLI usage error
+- 101: blocked by context/policy
+- 102: network required but offline mode is active
+- 127: script not found
 
-# Integration with other tools
-pyst list --format json | tools/analyze-scripts.py
-```
+Troubleshooting
 
-### Cache Management
-```bash
-# Clear introspection cache
-pyst cache clear
+- uv not found
+  - Install uv and ensure it’s on PATH: https://astral.sh/uv/
+- Offline failures
+  - When `--offline` (or `PYST_OFFLINE=1`) is set and dependencies are not hydrated, runs will fail. Re-run without offline to allow uv to resolve environments.
+- Nothing listed
+  - Ensure scripts exist in `.pyst/` (project) or in your configured global dirs.
+- Duplicate entries in list
+  - If a script exists both locally and installed globally, it may appear twice in `--all`. Resolution and execution follow precedence settings.
 
-# Show cache location
-pyst cache path
-```
+Contributing
 
-### Shell Completions
-```bash
-# Generate completions for your shell
-pyst completions bash > ~/.local/share/bash-completion/completions/pyst
-pyst completions zsh > ~/.local/share/zsh/site-functions/_pyst
-```
+- Build
+  ```bash
+  cargo build
+  ```
+- Run local tests (see Testing)
+- PRs welcome! Please keep the README accurate to implementation status.
 
-## 🏗️ Architecture
+License
 
-**pyst** follows a clean, modular architecture:
+MIT License. See `LICENSE`.
 
-- **Discovery Engine**: Finds and catalogs Python scripts
-- **Introspection System**: Analyzes scripts safely using AST or import modes
-- **Context Engine**: Applies rule-based filtering
-- **Execution Engine**: Runs scripts via `uv` with proper isolation
-- **Installation Manager**: Handles remote script installation and updates
-- **Documentation AI**: Generates descriptions using DSPy + LLMs
+Acknowledgments
 
-### Key Design Principles
+- uv for fast Python dependency management
+- Python packaging community and PEP 723 for inline script metadata
+- README structure informed by community templates and guides:
+  - [github.com](https://github.com/othneildrew/Best-README-Template)
+  - [freecodecamp.org](https://www.freecodecamp.org/news/how-to-write-a-good-readme-file/)
+  - [forum.cursor.com](https://forum.cursor.com/t/any-tips-on-creating-a-readme-md-from-within-cursor/6716)
 
-1. **Zero Configuration**: Works out of the box with sensible defaults
-2. **Performance**: Leverages `uv` for fast dependency resolution
-3. **Security**: Safe by default with opt-in trust mechanisms
-4. **Extensibility**: Plugin-ready architecture for future enhancements
-5. **AI Integration**: Modern tooling enhanced with LLM capabilities
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-### Development Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/pyst
-cd pyst
-
-# Build the project
-cargo build
-
-# Run tests
-cargo test
-
-# Test with real scripts
-./target/debug/pyst list
-```
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [uv](https://github.com/astral-sh/uv) - Blazingly fast Python package installer
-- [DSPy](https://github.com/stanfordnlp/dspy) - Programming language models framework
-- [PEP 723](https://peps.python.org/pep-0723/) - Inline script metadata standard
-- [Rust](https://rust-lang.org) - Systems programming language for performance and safety
-
----
+Notes for maintainers
+- Keep this README aligned with actual behavior. When promoting a feature from “In progress” to “Implemented,” add a minimal example snippet and, where relevant, a link to tests or docs.

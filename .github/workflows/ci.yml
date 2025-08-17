@@ -107,7 +107,7 @@ jobs:
         key: ${{ matrix.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
     
     - name: Install cross-compilation tools (Linux ARM64)
-      if: matrix.target == 'aarch64-unknown-linux-gnu'
+      if: matrix.target == 'aarch64-unknown-linux-gnu' && matrix.platform == 'linux-arm64'
       run: |
         sudo apt-get update
         # Add ARM64 architecture for multiarch packages
@@ -121,21 +121,21 @@ jobs:
         echo "PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig" >> $GITHUB_ENV
     
     - name: Build (Linux ARM64 cross-compilation)
-      if: matrix.target == 'aarch64-unknown-linux-gnu'
+      if: matrix.target == 'aarch64-unknown-linux-gnu' && matrix.platform == 'linux-arm64'
       run: OPENSSL_STATIC=1 OPENSSL_VENDORED=1 cargo build --target ${{ matrix.target }} --verbose
     
     - name: Build (other platforms)
-      if: matrix.target != 'aarch64-unknown-linux-gnu'
+      if: "!(matrix.target == 'aarch64-unknown-linux-gnu' && matrix.platform == 'linux-arm64')"
       run: cargo build --target ${{ matrix.target }} --verbose
     
     - name: Run unit tests
       # Skip cross-compilation tests for now
-      if: matrix.target != 'aarch64-unknown-linux-gnu'
+      if: "!(matrix.target == 'aarch64-unknown-linux-gnu' && matrix.platform == 'linux-arm64')"
       run: cargo test --target ${{ matrix.target }} --lib --bins --verbose
     
     - name: Run basic integration tests (native)
       # Test pyst commands natively to catch platform-specific issues
-      if: matrix.target != 'aarch64-unknown-linux-gnu'
+      if: "!(matrix.target == 'aarch64-unknown-linux-gnu' && matrix.platform == 'linux-arm64')"
       run: cargo test --target ${{ matrix.target }} --test integration_tests --verbose
     
     - name: Upload artifacts
